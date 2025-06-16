@@ -5,11 +5,13 @@
  * @param {*|RegExp|Object} searchValue - 搜索值，可以是普通值、正则表达式或对象
  * @param {Object} [options] - 搜索选项
  * @param {Function} [options.customFilter] - 自定义过滤函数
+ * @param {number} [options.maxDepth=0] - 最大搜索深度，<=0表示不限制深度
  * @returns {Array} - 包含匹配结果的数组
  */
 function searchProps(target, searchType, searchValue, options = {}) {
   const {
-    customFilter = () => true
+    customFilter = () => true,
+    maxDepth = 0
   } = options;
   
   if(!searchType){
@@ -21,7 +23,12 @@ function searchProps(target, searchType, searchValue, options = {}) {
   const visited = new WeakSet(); // 防止循环引用
 
   // 递归搜索函数
-  function traverse(obj, parentKey = null) {
+  function traverse(obj, parentKey = null, currentDepth = 1) {
+    // 检查深度限制
+    if (maxDepth > 0 && currentDepth > maxDepth) {
+      return;
+    }
+    
     // 检查当前对象是否为搜索的类型实例
     if (searchType === 'type' && typeof searchValue === 'function' && obj instanceof searchValue) {
       const path = parentKey || 'root';
@@ -36,7 +43,7 @@ function searchProps(target, searchType, searchValue, options = {}) {
     // 处理数组
     if (Array.isArray(obj)) {
       obj.forEach((item, index) => {
-        traverse(item, parentKey !== null ? `${parentKey}[${index}]` : `[${index}]`);
+        traverse(item, parentKey !== null ? `${parentKey}[${index}]` : `[${index}]`, currentDepth + 1);
       });
       return;
     }
@@ -149,7 +156,7 @@ function searchProps(target, searchType, searchValue, options = {}) {
 
         // 递归处理子对象
         if (typeof value === 'object' && value !== null) {
-          traverse(value, path);
+          traverse(value, path, currentDepth + 1);
         }
       }
     }

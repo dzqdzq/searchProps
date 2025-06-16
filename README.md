@@ -50,6 +50,7 @@ console.log(value);
  * @param {*|RegExp|Object} searchValue - Search value, can be a regular value, regular expression, or object
  * @param {Object} [options] - Search options
  * @param {Function} [options.customFilter] - Custom filter function
+ * @param {number} [options.maxDepth=0] - Maximum search depth, <=0 means no depth limit
  * @returns {Array} - Array containing matching results
  */
 function searchProps(target, searchType, searchValue, options = {});
@@ -70,6 +71,7 @@ function searchProps(target, searchType, searchValue, options = {});
   - When searchType is 'type', can be a type string (like 'string', 'number', 'object', 'function', 'array', 'date', 'regexp') or a constructor function
 - **options**: Optional configuration
   - **customFilter**: Custom filter function, receives (obj, key) as parameters, returns a boolean value
+  - **maxDepth**: Maximum search depth, <=0 means no depth limit, >0 limits the recursive search depth
 
 #### Return Value
 

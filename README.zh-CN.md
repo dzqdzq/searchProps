@@ -50,6 +50,7 @@ console.log(value);
  * @param {*|RegExp|Object} searchValue - 搜索值，可以是普通值、正则表达式或对象
  * @param {Object} [options] - 搜索选项
  * @param {Function} [options.customFilter] - 自定义过滤函数
+ * @param {number} [options.maxDepth=0] - 最大搜索深度，<=0表示不限制深度
  * @returns {Array} - 包含匹配结果的数组
  */
 function searchProps(target, searchType, searchValue, options = {});
@@ -70,6 +71,7 @@ function searchProps(target, searchType, searchValue, options = {});
   - 当searchType为'type'时，可以是类型字符串（如'string', 'number', 'object', 'function', 'array', 'date', 'regexp'）或构造函数
 - **options**: 可选配置
   - **customFilter**: 自定义过滤函数，接收(obj, key)两个参数，返回布尔值
+  - **maxDepth**: 最大搜索深度，<=0表示不限制深度，>0限制递归搜索深度
 
 #### 返回值
 
