@@ -18,7 +18,6 @@ function searchProps(target, searchType, searchValue, options = {}) {
 
   const results = [];
   const isRegExp = searchValue instanceof RegExp;
-  const isObjectSearch = typeof searchValue === 'object' && searchValue !== null && !isRegExp;
   const visited = new WeakSet(); // 防止循环引用
 
   // 递归搜索函数
@@ -101,14 +100,7 @@ function searchProps(target, searchType, searchValue, options = {}) {
               value,
               type: typeof value
             });
-          } else if (isObjectSearch && deepEqual(value, searchValue)) {
-            results.push({
-              path,
-              key: keyStr,
-              value,
-              type: typeof value
-            });
-          } else if (value === searchValue) {
+          } if (value === searchValue) {
             results.push({
               path,
               key: keyStr,
@@ -161,25 +153,6 @@ function searchProps(target, searchType, searchValue, options = {}) {
         }
       }
     }
-  }
-
-  // 对象深度比较函数
-  function deepEqual(a, b) {
-    if (a === b) return true;
-    if (a === null || b === null) return false;
-    if (typeof a !== 'object' || typeof b !== 'object') return false;
-
-    const aKeys = Object.keys(a);
-    const bKeys = Object.keys(b);
-
-    if (aKeys.length !== bKeys.length) return false;
-
-    for (const key of aKeys) {
-      if (!bKeys.includes(key)) return false;
-      if (!deepEqual(a[key], b[key])) return false;
-    }
-
-    return true;
   }
 
   traverse(target);
