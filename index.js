@@ -2,49 +2,191 @@
  * 对象搜索工具，支持按值、键、类型和全部四种方式搜索对象
  * @param {Object|Array} target - 要搜索的目标对象或数组
  * @param {string} searchType - 搜索类型："value"、"key"、"type" 或 "all"
- * @param {*|RegExp|Object} searchValue - 搜索值，可以是普通值、正则表达式或对象
+ * @param {*|RegExp|Function} searchValue - 搜索值，可以是普通值、正则表达式或构造函数
  * @param {Object} [options] - 搜索选项
- * @param {Function} [options.customFilter] - 自定义过滤函数
+ * @param {Function} [options.filter] - 自定义过滤函数
  * @param {number} [options.maxDepth=0] - 最大搜索深度，<=0表示不限制深度
+ * @param {number} [options.maxResults=10000] - 最大结果数量限制
  * @returns {Array} - 包含匹配结果的数组
  */
 function searchProps(target, searchType, searchValue, options = {}) {
+  // 输入验证
+  if (target === null || target === undefined) {
+    return [];
+  }
+  
   const {
-    customFilter = () => true,
-    maxDepth = 0
+    filter: customFilter = () => true,
+    maxDepth = 0,
+    maxResults = 10000
   } = options;
   
-  if(!searchType){
+  if (!searchType) {
     searchType = 'all';
+  }
+  
+  // 验证搜索类型
+  const validTypes = ['value', 'key', 'type', 'all'];
+  if (!validTypes.includes(searchType)) {
+    throw new Error(`Invalid searchType: ${searchType}. Must be one of: ${validTypes.join(', ')}`);
   }
 
   const results = [];
   const isRegExp = searchValue instanceof RegExp;
   const visited = new WeakSet(); // 防止循环引用
+  
+  // 提取公共匹配逻辑
+  const matchValue = (value) => {
+    if (isRegExp && typeof value === 'string') {
+      return searchValue.test(value);
+    }
+    return value === searchValue;
+  };
+  
+  const matchType = (value) => {
+    if (typeof searchValue === 'string') {
+      return typeof value === searchValue;
+    }
+    if (typeof searchValue === 'function') {
+      try {
+        return value instanceof searchValue;
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  };
+  
+  const matchKey = (key) => {
+    if (typeof key === 'symbol') {
+      // 如果searchValue是字符串，比较Symbol的描述
+      if (typeof searchValue === 'string') {
+        const symbolDescription = key.description || '';
+        return symbolDescription === searchValue || key.toString() === searchValue;
+      }
+      // 如果searchValue是正则表达式，测试Symbol的描述和toString
+      if (isRegExp) {
+        const symbolDescription = key.description || '';
+        const symbolString = key.toString();
+        return searchValue.test(symbolDescription) || searchValue.test(symbolString);
+      }
+      // 直接比较Symbol对象
+      return key === searchValue;
+    }
+    if (isRegExp && typeof key === 'string') {
+      return searchValue.test(key);
+    }
+    return key === searchValue;
+  };
+  
+  const addResult = (paths, value) => {
+    if (results.length >= maxResults) {
+      return false; // 达到最大结果数量
+    }
+    results.push({
+      paths: [...paths],
+      value,
+      type: typeof value
+    });
+    return true;
+  };
+  
+  const formatPath = (parentPaths, key, isMapKey = false) => {
+    const newPaths = [...parentPaths];
+    if (isMapKey) {
+      if (typeof key === 'symbol') {
+        newPaths.push(`get(Symbol(${key.description || ''}))`);
+      } else {
+        newPaths.push(`get("${key}")`);
+      }
+    } else if (typeof key === 'symbol') {
+      newPaths.push(key);
+    } else {
+      newPaths.push(String(key));
+    }
+    return newPaths;
+  };
 
   // 递归搜索函数
-  function traverse(obj, parentKey = null, currentDepth = 1) {
-    // 检查深度限制
-    if (maxDepth > 0 && currentDepth > maxDepth) {
+  function traverse(obj, parentPaths = [], currentDepth = 1) {
+    // 检查深度限制和结果数量限制
+    if ((maxDepth > 0 && currentDepth > maxDepth) || results.length >= maxResults) {
       return;
     }
     
-    // 检查当前对象是否为搜索的类型实例
-    if (searchType === 'type' && typeof searchValue === 'function' && obj instanceof searchValue) {
-      const path = parentKey || 'root';
-      results.push({
-        path,
-        key: path.split('.').pop() || path,
-        value: obj,
-        type: searchValue.name || 'class'
-      });
+    // 检查类型匹配
+    if ((searchType === 'type' || searchType === 'all') && matchType(obj)) {
+      if (!addResult(parentPaths, obj)) return;
+    }
+    
+    // 处理Map类型
+    if (obj instanceof Map) {
+      if (visited.has(obj)) {
+        return;
+      }
+      visited.add(obj);
+      
+      // 遍历Map的所有键值对
+      for (const [mapKey, mapValue] of obj.entries()) {
+        if (results.length >= maxResults) break;
+        
+        // 应用自定义过滤器
+        if (!customFilter(obj, mapKey)) {
+          continue;
+        }
+        
+        const newPaths = formatPath(parentPaths, mapKey, true);
+        
+        // 检查键匹配
+        if ((searchType === 'key' || searchType === 'all') && matchKey(mapKey)) {
+          if (!addResult(newPaths, mapValue)) return;
+        }
+        
+        // 检查值匹配
+        if ((searchType === 'value' || searchType === 'all') && matchValue(mapValue)) {
+          if (!addResult(newPaths, mapValue)) return;
+        }
+        
+        // 检查类型匹配（只对非对象类型检查）
+        if ((searchType === 'type' || searchType === 'all') && 
+            (typeof mapValue !== 'object' || mapValue === null) && 
+            matchType(mapValue)) {
+          if (!addResult(newPaths, mapValue)) return;
+        }
+        
+        // 递归处理Map的值
+        if (typeof mapValue === 'object' && mapValue !== null) {
+          traverse(mapValue, newPaths, currentDepth + 1);
+        }
+      }
+      return;
     }
     
     // 处理数组
     if (Array.isArray(obj)) {
-      obj.forEach((item, index) => {
-        traverse(item, parentKey !== null ? `${parentKey}[${index}]` : `[${index}]`, currentDepth + 1);
-      });
+      for (let index = 0; index < obj.length; index++) {
+        if (results.length >= maxResults) break;
+        
+        const item = obj[index];
+        const newPaths = [...parentPaths, `[${index}]`];
+        
+        // 检查值匹配
+        if ((searchType === 'value' || searchType === 'all') && matchValue(item)) {
+          if (!addResult(newPaths, item)) return;
+        }
+        
+        // 检查类型匹配（只对非对象类型检查）
+        if ((searchType === 'type' || searchType === 'all') && 
+            (typeof item !== 'object' || item === null) && 
+            matchType(item)) {
+          if (!addResult(newPaths, item)) return;
+        }
+        
+        // 递归处理子对象
+        if (typeof item === 'object' && item !== null) {
+          traverse(item, newPaths, currentDepth + 1);
+        }
+      }
       return;
     }
 
@@ -60,103 +202,43 @@ function searchProps(target, searchType, searchValue, options = {}) {
       
       // 遍历所有属性
       for (const key of keys) {
+        if (results.length >= maxResults) break;
+        
         // 应用自定义过滤器
         if (!customFilter(obj, key)) {
           continue;
         }
         
-        const keyStr = typeof key === 'symbol' ? key.toString() : String(key);
-        
-        const path = parentKey !== null ? 
-          (typeof key === 'symbol' ? `${parentKey}[${keyStr}]` : 
-           `${parentKey}.${keyStr}`) : keyStr;
+        const newPaths = formatPath(parentPaths, key, false);
         let value;
         try {
           value = Reflect.get(obj, key);
         } catch (error) {
-          // 记录异常路径
-          console.error('访问异常：',path);
+          // 记录异常路径，修复变量名错误
+          console.error('访问异常：', newPaths, error);
           continue;
         }
 
         // 检查键匹配
-        if (searchType === 'key' || searchType === 'all') {
-          if (isRegExp && searchValue.test(keyStr)) {
-            results.push({
-              path,
-              key: keyStr,
-              value,
-              type: typeof value
-            });
-          } else if (keyStr === searchValue || (typeof key === 'symbol' && key.toString() === searchValue)) {
-            results.push({
-              path,
-              key: keyStr,
-              value,
-              type: typeof value
-            });
-          }
+        if ((searchType === 'key' || searchType === 'all') && matchKey(key)) {
+          if (!addResult(newPaths, value)) return;
         }
 
         // 检查值匹配
-        if (searchType === 'value' || searchType === 'all') {
-          if (isRegExp && typeof value === 'string' && searchValue.test(value)) {
-            results.push({
-              path,
-              key: keyStr,
-              value,
-              type: typeof value
-            });
-          } if (value === searchValue) {
-            results.push({
-              path,
-              key: keyStr,
-              value,
-              type: typeof value
-            });
-          }
+        if ((searchType === 'value' || searchType === 'all') && matchValue(value)) {
+          if (!addResult(newPaths, value)) return;
         }
 
-        // 检查类型匹配
-        if ((searchType === 'type' || searchType === 'all') && searchType !== 'type') {
-          // 只在searchType不是'type'时才在这里检查类型，避免重复添加
-          const typeStr = typeof value;
-          if (typeStr === searchValue) {
-            results.push({
-              path,
-              key: keyStr,
-              value,
-              type: typeStr
-            });
-          } else if (typeStr === 'object' && value !== null) {
-            if (Array.isArray(value) && searchValue === 'array') {
-              results.push({
-                path,
-                key: keyStr,
-                value,
-                type: 'array'
-              });
-            } else if (value instanceof Date && searchValue === 'date') {
-              results.push({
-                path,
-                key: keyStr,
-                value,
-                type: 'date'
-              });
-            } else if (value instanceof RegExp && searchValue === 'regexp') {
-              results.push({
-                path,
-                key: keyStr,
-                value,
-                type: 'regexp'
-              });
-            }
-          }
+        // 检查类型匹配（只对非对象类型检查）
+        if ((searchType === 'type' || searchType === 'all') && 
+            (typeof value !== 'object' || value === null) && 
+            matchType(value)) {
+          if (!addResult(newPaths, value)) return;
         }
 
         // 递归处理子对象
         if (typeof value === 'object' && value !== null) {
-          traverse(value, path, currentDepth + 1);
+          traverse(value, newPaths, currentDepth + 1);
         }
       }
     }
@@ -166,105 +248,5 @@ function searchProps(target, searchType, searchValue, options = {}) {
   return results;
 }
 
-/**
- * 根据路径字符串查询对象中的值
- * @param {Object|Array} target - 要查询的目标对象或数组
- * @param {string} path - 属性路径，例如 "obj.prop[0][Symbol(name)]"
- * @returns {*} - 查询到的值，如果路径无效则返回undefined
- */
-function queryValueFromPath(target, path) {
-  if (!target || typeof target !== 'object' || !path) {
-    return undefined;
-  }
-
-  // 解析路径字符串
-  const segments = [];
-  let currentSegment = '';
-  let inBracket = false;
-  let symbolName = '';
-  let inSymbol = false;
-
-  // 解析路径字符串为路径段数组
-  for (let i = 0; i < path.length; i++) {
-    const char = path[i];
-    
-    if (char === '.' && !inBracket) {
-      if (currentSegment) {
-        segments.push({ type: 'property', value: currentSegment });
-        currentSegment = '';
-      }
-    } else if (char === '[') {
-      if (currentSegment) {
-        segments.push({ type: 'property', value: currentSegment });
-        currentSegment = '';
-      }
-      inBracket = true;
-    } else if (char === ']' && inBracket) {
-      if (inSymbol) {
-        segments.push({ type: 'symbol', value: symbolName.trim() });
-        symbolName = '';
-        inSymbol = false;
-      } else if (currentSegment) {
-        // 检查是否为数字（数组索引）
-        if (/^\d+$/.test(currentSegment)) {
-          segments.push({ type: 'index', value: parseInt(currentSegment, 10) });
-        } else {
-          segments.push({ type: 'property', value: currentSegment });
-        }
-        currentSegment = '';
-      }
-      inBracket = false;
-    } else if (inBracket && path.substring(i, i + 7) === 'Symbol(' && !inSymbol) {
-      inSymbol = true;
-      i += 6; // 跳过 'Symbol('
-    } else if (inSymbol && char === ')') {
-      // 不做任何处理，等待下一个 ']' 来结束符号处理
-    } else if (inSymbol) {
-      symbolName += char;
-    } else if (inBracket || char !== ' ') { // 忽略空格，除非在括号内
-      currentSegment += char;
-    }
-  }
-
-  // 处理最后一个段
-  if (currentSegment) {
-    segments.push({ type: 'property', value: currentSegment });
-  }
-
-  // 根据路径段查找值
-  let current = target;
-  try {
-    for (const segment of segments) {
-      if (current === null || current === undefined) {
-        return undefined;
-      }
-
-      if (segment.type === 'property') {
-        current = current[segment.value];
-      } else if (segment.type === 'index') {
-        if (Array.isArray(current)) {
-          current = current[segment.value];
-        } else {
-          return undefined; // 不是数组但尝试用索引访问
-        }
-      } else if (segment.type === 'symbol') {
-        // 查找匹配的Symbol
-        const symbols = Object.getOwnPropertySymbols(current);
-        const targetSymbol = symbols.find(sym => sym.toString() === `Symbol(${segment.value})`);
-        
-        if (targetSymbol) {
-          current = current[targetSymbol];
-        } else {
-          return undefined; // 找不到匹配的Symbol
-        }
-      }
-    }
-    return current;
-  } catch (error) {
-    console.error(`访问路径 "${path}" 时出错:`, error.message);
-    return undefined;
-  }
-}
-
 // 导出searchObj函数
-export { searchProps, queryValueFromPath  };
+export { searchProps };

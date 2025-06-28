@@ -24,20 +24,6 @@ searchProps
 - 如调试控制台
 - 第三方库或者破解目标第三方应用程序中
 
-### 在代码中使用
-
-```js
-import { searchProps, queryValueFromPath } from 'search-props';
-
-// 搜索对象中的所有属性
-const results = searchProps(myObject, 'all', 'propertyName');
-console.log(results);
-
-// 根据路径获取对象中的值
-const value = queryValueFromPath(myObject, 'property.nestedArray[0].deepProperty');
-console.log(value);
-```
-
 ## API 说明
 
 ### searchProps
@@ -47,10 +33,11 @@ console.log(value);
  * 对象搜索工具，支持按值、键、类型和全部四种方式搜索对象
  * @param {Object|Array} target - 要搜索的目标对象或数组
  * @param {string} searchType - 搜索类型："value"、"key"、"type" 或 "all"
- * @param {*|RegExp|Object} searchValue - 搜索值，可以是普通值、正则表达式或对象
+ * @param {*|RegExp|Function} searchValue - 搜索值，可以是普通值、正则表达式或构造函数
  * @param {Object} [options] - 搜索选项
- * @param {Function} [options.customFilter] - 自定义过滤函数
+ * @param {Function} [options.filter] - 自定义过滤函数
  * @param {number} [options.maxDepth=0] - 最大搜索深度，<=0表示不限制深度
+ * @param {number} [options.maxResults=10000] - 最大结果数量限制
  * @returns {Array} - 包含匹配结果的数组
  */
 function searchProps(target, searchType, searchValue, options = {});
@@ -67,43 +54,19 @@ function searchProps(target, searchType, searchValue, options = {});
 - **searchValue**: 搜索值
   - 可以是普通值（字符串、数字等）
   - 可以是正则表达式（用于模式匹配）
-  - 可以是对象（用于深度比较）
+  - 可以是对象
   - 当searchType为'type'时，可以是类型字符串（如'string', 'number', 'object', 'function', 'array', 'date', 'regexp'）或构造函数
 - **options**: 可选配置
-  - **customFilter**: 自定义过滤函数，接收(obj, key)两个参数，返回布尔值
+  - **filter**: 自定义过滤函数，接收(obj, key)两个参数，返回布尔值
   - **maxDepth**: 最大搜索深度，<=0表示不限制深度，>0限制递归搜索深度
 
 #### 返回值
 
 返回一个包含匹配结果的数组，每个结果对象包含以下属性：
-- **path**: 属性的完整路径
-- **key**: 属性名
+- **paths**: 属性的完整路径
 - **value**: 属性值
 - **type**: 属性值的类型
 
-### queryValueFromPath
-
-```js
-/**
- * 根据路径字符串查询对象中的值
- * @param {Object|Array} target - 要查询的目标对象或数组
- * @param {string} path - 属性路径，例如 "obj.prop[0][Symbol(name)]"
- * @returns {*} - 查询到的值，如果路径无效则返回undefined
- */
-function queryValueFromPath(target, path);
-```
-
-#### 参数说明
-
-- **target**: 要查询的目标对象或数组
-- **path**: 属性路径字符串
-  - 支持点表示法：`obj.property`
-  - 支持数组索引：`array[0]`
-  - 支持Symbol属性：`obj[Symbol(name)]`
-
-#### 返回值
-
-返回查询到的值，如果路径无效则返回undefined
 
 ## 示例
 
@@ -127,7 +90,7 @@ const results = searchProps(obj, 'key', /name/);
 
 ```js
 const obj = { name: 'John', age: 30, active: true, tags: ['user', 'admin'] };
-const results = searchProps(obj, 'type', 'array');
+const results = searchProps(obj, 'type', Array);
 // 结果: 匹配所有数组类型的属性
 ```
 
@@ -145,17 +108,9 @@ const results = searchProps(obj, 'key', sym.toString());
 ```js
 const obj = { name: 'John', _private: 'secret', age: 30 };
 const results = searchProps(obj, 'all', null, {
-  customFilter: (obj, key) => !String(key).startsWith('_')
+  filter: (obj, key) => !String(key).startsWith('_')
 });
 // 结果: 排除所有以下划线开头的属性
-```
-
-### 根据路径获取值
-
-```js
-const obj = { users: [{ name: 'John', profile: { role: 'admin' } }] };
-const role = queryValueFromPath(obj, 'users[0].profile.role');
-// 结果: 'admin'
 ```
 
 ## 特性

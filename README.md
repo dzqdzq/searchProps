@@ -24,20 +24,6 @@ searchProps
 - In debug console
 - In third-party libraries or when reverse engineering target third-party applications
 
-### Usage in Code
-
-```js
-import { searchProps, queryValueFromPath } from 'search-props';
-
-// Search for all properties in an object
-const results = searchProps(myObject, 'all', 'propertyName');
-console.log(results);
-
-// Get a value from an object using a path
-const value = queryValueFromPath(myObject, 'property.nestedArray[0].deepProperty');
-console.log(value);
-```
-
 ## API Documentation
 
 ### searchProps
@@ -47,10 +33,11 @@ console.log(value);
  * Object search tool, supports searching by value, key, type, or all four methods
  * @param {Object|Array} target - The target object or array to search
  * @param {string} searchType - Search type: "value", "key", "type" or "all"
- * @param {*|RegExp|Object} searchValue - Search value, can be a regular value, regular expression, or object
+ * @param {*|RegExp|Function} searchValue - Search value, can be a regular value, regular expression or constructor function
  * @param {Object} [options] - Search options
- * @param {Function} [options.customFilter] - Custom filter function
+ * @param {Function} [options.filter] - Custom filter function
  * @param {number} [options.maxDepth=0] - Maximum search depth, <=0 means no depth limit
+ * @param {number} [options.maxResults=10000] - Maximum number of results limit
  * @returns {Array} - Array containing matching results
  */
 function searchProps(target, searchType, searchValue, options = {});
@@ -70,40 +57,18 @@ function searchProps(target, searchType, searchValue, options = {});
   - Can be an object (for deep comparison)
   - When searchType is 'type', can be a type string (like 'string', 'number', 'object', 'function', 'array', 'date', 'regexp') or a constructor function
 - **options**: Optional configuration
-  - **customFilter**: Custom filter function, receives (obj, key) as parameters, returns a boolean value
+  - **filter**: Custom filter function, receives (obj, key) as parameters, returns a boolean value
   - **maxDepth**: Maximum search depth, <=0 means no depth limit, >0 limits the recursive search depth
+  - **maxResults**: Maximum number of results limit
 
 #### Return Value
 
 Returns an array containing matching results, each result object includes the following properties:
-- **path**: The complete path of the property
-- **key**: The property name
+- **paths**: The complete path of the property
 - **value**: The property value
 - **type**: The type of the property value
 
-### queryValueFromPath
 
-```js
-/**
- * Query a value in an object based on a path string
- * @param {Object|Array} target - The target object or array to query
- * @param {string} path - Property path, e.g., "obj.prop[0][Symbol(name)]"
- * @returns {*} - The queried value, returns undefined if the path is invalid
- */
-function queryValueFromPath(target, path);
-```
-
-#### Parameters
-
-- **target**: The target object or array to query
-- **path**: Property path string
-  - Supports dot notation: `obj.property`
-  - Supports array indices: `array[0]`
-  - Supports Symbol properties: `obj[Symbol(name)]`
-
-#### Return Value
-
-Returns the queried value, or undefined if the path is invalid
 
 ## Examples
 
@@ -112,7 +77,7 @@ Returns the queried value, or undefined if the path is invalid
 ```js
 const obj = { name: 'John', age: 30, info: { email: 'john@example.com' } };
 const results = searchProps(obj, 'key', 'name');
-// Result: [{ path: 'name', key: 'name', value: 'John', type: 'string' }]
+// Result: [{ paths: 'name', value: 'John', type: 'string' }]
 ```
 
 ### Search Using Regular Expressions
@@ -127,7 +92,7 @@ const results = searchProps(obj, 'key', /name/);
 
 ```js
 const obj = { name: 'John', age: 30, active: true, tags: ['user', 'admin'] };
-const results = searchProps(obj, 'type', 'array');
+const results = searchProps(obj, 'type', Array);
 // Result: Matches all properties of array type
 ```
 
@@ -145,18 +110,12 @@ const results = searchProps(obj, 'key', sym.toString());
 ```js
 const obj = { name: 'John', _private: 'secret', age: 30 };
 const results = searchProps(obj, 'all', null, {
-  customFilter: (obj, key) => !String(key).startsWith('_')
+  filter: (obj, key) => !String(key).startsWith('_')
 });
 // Result: Excludes all properties starting with an underscore
 ```
 
-### Get Value by Path
 
-```js
-const obj = { users: [{ name: 'John', profile: { role: 'admin' } }] };
-const role = queryValueFromPath(obj, 'users[0].profile.role');
-// Result: 'admin'
-```
 
 ## Features
 

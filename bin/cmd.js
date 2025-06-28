@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
 import clipboardy from 'clipboardy';
-import {searchProps, queryValueFromPath} from '../index.js';
-clipboardy.writeSync(searchProps.toString() + "\n" + queryValueFromPath.toString());
+import {searchProps} from '../index.js';
+clipboardy.writeSync(searchProps.toString());
+console.log("searchProps copy success");
